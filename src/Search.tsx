@@ -1,4 +1,5 @@
-import { Button, Select, Typography } from "antd";
+import { LoadingOutlined } from '@ant-design/icons';
+import { Button, Select, Spin, Typography } from "antd";
 import { useEffect, useState } from "react";
 
 const supplierDataform = "Supplier_Master_A20";
@@ -31,20 +32,31 @@ export default function Search() {
     const [selectedSupplier, setSelectedSupplier] = useState<string>("");
     const [selectedCategory, setSelectedCategory] = useState<string>("");
     const [disable, setDisable] = useState(false);
+    const [cartButtonDisable, setCardButtonDisable] = useState(false);
+    const [loading, setLoading] = useState(false);
     useEffect(() => {
         (async () => {
+            setLoading(true);
             await KFSDK.initialize();
             const suppliers = await getSuppliers();
-            setSuppliers(suppliers);
+            const existingPR = await findExistingPR();
 
-            const defaultSelectedSupplier = await KFSDK.app.getVariable(selectedSupplierName);
-            const defaultSelectedCategory = await KFSDK.app.getVariable(selectedCategoryName);
-            if (defaultSelectedSupplier && defaultSelectedCategory) {
-                console.log("defaultSelectedSupplier : ", defaultSelectedSupplier, defaultSelectedCategory)
-                setSelectedCategory(defaultSelectedCategory);
-                setSelectedSupplier(defaultSelectedSupplier);
-                setDisable(true);
+            if (existingPR) {
+                const defaultSelectedSupplier = await KFSDK.app.getVariable(selectedSupplierName);
+                const defaultSelectedCategory = await KFSDK.app.getVariable(selectedCategoryName);
+                if (defaultSelectedSupplier && defaultSelectedCategory) {
+                    setSelectedCategory(defaultSelectedCategory);
+                    setSelectedSupplier(defaultSelectedSupplier);
+                    setDisable(true);
+                    setCardButtonDisable(false);
+                }
+            } else {
+                await KFSDK.app.setVariable(selectedSupplierName, null);
+                await KFSDK.app.setVariable(selectedCategoryName, null);
+                setCardButtonDisable(true);
             }
+            setSuppliers(suppliers);
+            setLoading(false);
         })();
     }, []);
 
@@ -95,11 +107,9 @@ export default function Search() {
     }
 
     async function discardCurentPR() {
-        let my_req_draft_items = await KFSDK.api("/process/2/" + KFSDK.account._id + "/Requisition_A89/myitems/draft");
-        let items = my_req_draft_items.Data;
-        let existingPR = items.find((d: any) => d.Buying_channel_text == "Hosted catalog");
+        const existingPR = await findExistingPR();
         if (existingPR) {
-            await KFSDK.client.showConfirm({ title: "Discard card", content: "Are you sure want to clear the cart ?" }).then((action: any) => {
+            await KFSDK.client.showConfirm({ title: "Discard Cart", content: "Are you sure want to clear the cart ?" }).then((action: any) => {
                 if (action === "OK") {
                     KFSDK.app.setVariable("Cart_Item_Count", 0);
                     KFSDK.api("/process/2/" + KFSDK.account._id + "/Requisition_A89/" + existingPR._id, { method: "DELETE" });
@@ -110,66 +120,82 @@ export default function Search() {
         return false;
     }
 
+    async function findExistingPR() {
+        let my_req_draft_items = await KFSDK.api("/process/2/" + KFSDK.account._id + "/Requisition_A89/myitems/draft");
+        let items = my_req_draft_items.Data;
+        let existingPR = items.find((d: any) => d.Buying_channel_text == "Hosted catalog");
+        return existingPR;
+    }
+
     const filterOption = (input: string, option?: { label: string; value: string }) =>
         (option?.label ?? '').toLowerCase().includes(input.toLowerCase());
 
     return (
         <div style={{ display: "flex", justifyContent: "center", width: "100%" }} >
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 10, width: "100%", justifyContent: "center" }} >
-                <div style={{ marginLeft: 10 }} >
-                    <Typography style={{ textAlign: "left", fontWeight: 600 }} >Category Type</Typography>
-                    <Select
-                        options={Category ? Category?.map((cat) => ({ value: cat._id, label: cat.name })) : []}
-                        value={selectedCategory}
-                        onChange={(e) => {
-                            setSelectedCategory(e);
-                        }}
-                        style={{ width: dropdownWidth }}
-                        showSearch
-                        filterOption={filterOption}
-                        listHeight={listHeight}
-                        disabled={disable}
-                    />
-                </div>
-                <div>
-                    <Typography style={{ textAlign: "left", fontWeight: 600 }} >Suppliers</Typography>
-                    <Select
-                        options={suppliers ? suppliers?.map((cat) => ({ value: cat._id, label: cat.Supplier })) : []}
-                        value={selectedSupplier}
-                        onChange={(e) => {
-                            setSelectedSupplier(e);
-                        }}
-                        style={{ width: dropdownWidth }}
-                        showSearch
-                        filterOption={filterOption}
-                        listHeight={listHeight}
-                        disabled={disable}
-                    />
-                </div>
-                <div>
-                    <Button
-                        type="primary"
-                        style={{
-                            backgroundColor: "#0565ff",
-                            height: "32px",
-                            width: 80
-                        }}
-                        onClick={async () => {
-                            const discarded = await discardCurentPR();
-                            if (discarded) {
-                                setSelectedSupplier("");
-                                setSelectedCategory("");
-                                setDisable(false);
-                                await KFSDK.app.setVariable(selectedCategoryName, "");
-                                await KFSDK.app.setVariable(selectedSupplierName, "");
-                                await refreshComponent();
-                            }
-                        }}
-                    >
-                        Clear Cart
-                    </Button>
-                </div>
-            </div>
+            {
+                loading ?
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }} >
+                        <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
+                    </div>
+                    :
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 10, width: "100%", justifyContent: "center" }} >
+                        <div style={{ marginLeft: 10 }} >
+                            <Typography style={{ textAlign: "left", fontWeight: 600 }} >Category Type</Typography>
+                            <Select
+                                options={Category ? Category?.map((cat) => ({ value: cat._id, label: cat.name })) : []}
+                                value={selectedCategory}
+                                onChange={(e) => {
+                                    setSelectedCategory(e);
+                                }}
+                                style={{ width: dropdownWidth }}
+                                showSearch
+                                filterOption={filterOption}
+                                listHeight={listHeight}
+                                disabled={disable}
+                            />
+                        </div>
+                        <div>
+                            <Typography style={{ textAlign: "left", fontWeight: 600 }} >Suppliers</Typography>
+                            <Select
+                                options={suppliers ? suppliers?.map((cat) => ({ value: cat._id, label: cat.Supplier })) : []}
+                                value={selectedSupplier}
+                                onChange={(e) => {
+                                    setSelectedSupplier(e);
+                                }}
+                                style={{ width: dropdownWidth }}
+                                showSearch
+                                filterOption={filterOption}
+                                listHeight={listHeight}
+                                disabled={disable}
+                            />
+                        </div>
+                        <div>
+                            <Button
+                                type="primary"
+                                style={{
+                                    // backgroundColor: "#0565ff",
+                                    height: "32px",
+                                    width: 80
+                                }}
+                                onClick={async () => {
+                                    const discarded = await discardCurentPR();
+                                    if (discarded) {
+                                        setSelectedSupplier("");
+                                        setSelectedCategory("");
+                                        setDisable(false);
+                                        setCardButtonDisable(true);
+                                        await KFSDK.app.setVariable(selectedCategoryName, "");
+                                        await KFSDK.app.setVariable(selectedSupplierName, "");
+                                        await refreshComponent();
+                                    }
+                                }}
+                                disabled={cartButtonDisable}
+                            >
+                                Clear Cart
+                            </Button>
+                        </div>
+                    </div>
+            }
         </div>
     )
 }
