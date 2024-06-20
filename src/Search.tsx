@@ -1,10 +1,11 @@
-import { LoadingOutlined } from '@ant-design/icons';
+import { CloseOutlined, DownOutlined, LoadingOutlined } from '@ant-design/icons';
 import { Button, Select, Spin, Typography } from "antd";
 import { useEffect, useState } from "react";
 
 const supplierDataform = "Supplier_Master_A20";
-const selectedSupplierName = "PR_Selected_Supplier";
-const selectedCategoryName = "PR_Selected_Category";
+const selectedSupplierKey = "PR_Selected_Supplier";
+const selectedCategoryKey = "PR_Selected_Category";
+const cartKey = "Cart_Item_Count";
 
 const KFSDK = require("@kissflow/lowcode-client-sdk");
 
@@ -39,11 +40,11 @@ export default function Search() {
             setLoading(true);
             await KFSDK.initialize();
             const suppliers = await getSuppliers();
-            const existingPR = await findExistingPR();
-
-            if (existingPR) {
-                const defaultSelectedSupplier = await KFSDK.app.getVariable(selectedSupplierName);
-                const defaultSelectedCategory = await KFSDK.app.getVariable(selectedCategoryName);
+            // const existingPR = await findExistingPR();
+            const cartCount = await KFSDK.app.getVariable(cartKey);
+            if (cartCount) {
+                const defaultSelectedSupplier = await KFSDK.app.getVariable(selectedSupplierKey);
+                const defaultSelectedCategory = await KFSDK.app.getVariable(selectedCategoryKey);
                 if (defaultSelectedSupplier && defaultSelectedCategory) {
                     setSelectedCategory(defaultSelectedCategory);
                     setSelectedSupplier(defaultSelectedSupplier);
@@ -51,8 +52,8 @@ export default function Search() {
                     setCardButtonDisable(false);
                 }
             } else {
-                await KFSDK.app.setVariable(selectedSupplierName, null);
-                await KFSDK.app.setVariable(selectedCategoryName, null);
+                await KFSDK.app.setVariable(selectedSupplierKey, null);
+                await KFSDK.app.setVariable(selectedCategoryKey, null);
                 setCardButtonDisable(true);
             }
             setSuppliers(suppliers);
@@ -60,23 +61,23 @@ export default function Search() {
         })();
     }, []);
 
-    useEffect(() => {
-        if (selectedSupplier) {
-            (async () => {
-                await KFSDK.app.setVariable(selectedSupplierName, selectedSupplier);
-                await refreshComponent();
-            })()
-        }
-    }, [selectedSupplier])
+    // useEffect(() => {
+    //     if (selectedSupplier) {
+    //         (async () => {
+    //             await KFSDK.app.setVariable(selectedSupplierKey, selectedSupplier);
+    //             await refreshComponent();
+    //         })()
+    //     }
+    // }, [selectedSupplier])
 
-    useEffect(() => {
-        if (selectedCategory) {
-            (async () => {
-                await KFSDK.app.setVariable(selectedCategoryName, selectedCategory);
-                await refreshComponent();
-            })()
-        }
-    }, [selectedCategory])
+    // useEffect(() => {
+    //     if (selectedCategory) {
+    //         (async () => {
+    //             await KFSDK.app.setVariable(selectedCategoryKey, selectedCategory);
+    //             await refreshComponent();
+    //         })()
+    //     }
+    // }, [selectedCategory])
 
     async function getSuppliers() {
         const response = await KFSDK.api(`/form/2/${KFSDK.account._id}/${supplierDataform}/allitems/list?&page_number=1&page_size=10000`, {
@@ -109,11 +110,16 @@ export default function Search() {
     async function discardCurentPR() {
         const existingPR = await findExistingPR();
         if (existingPR) {
-            await KFSDK.client.showConfirm({ title: "Discard Cart", content: "Are you sure want to clear the cart ?" }).then((action: any) => {
-                if (action === "OK") {
-                    KFSDK.app.setVariable("Cart_Item_Count", 0);
-                    KFSDK.api("/process/2/" + KFSDK.account._id + "/Requisition_A89/" + existingPR._id, { method: "DELETE" });
-                }
+            await new Promise((res, rej) => {
+                KFSDK.client.showConfirm({ title: "Discard Cart", content: "Are you sure want to clear the cart ?" }).then((action: any) => {
+                    if (action === "OK") {
+                        KFSDK.app.setVariable("Cart_Item_Count", 0);
+                        KFSDK.api("/process/2/" + KFSDK.account._id + "/Requisition_A89/" + existingPR._id, { method: "DELETE" });
+                        res(1);
+                    }
+                }).catch((error: any) => {
+                    rej(-1);
+                })
             })
             return true;
         }
@@ -144,7 +150,9 @@ export default function Search() {
                             <Select
                                 options={Category ? Category?.map((cat) => ({ value: cat._id, label: cat.name })) : []}
                                 value={selectedCategory}
-                                onChange={(e) => {
+                                onChange={async (e) => {
+                                    await KFSDK.app.setVariable(selectedCategoryKey, e);
+                                    await refreshComponent();
                                     setSelectedCategory(e);
                                 }}
                                 style={{ width: dropdownWidth }}
@@ -152,6 +160,15 @@ export default function Search() {
                                 filterOption={filterOption}
                                 listHeight={listHeight}
                                 disabled={disable}
+                                suffixIcon={selectedCategory ?
+                                    <CloseOutlined
+                                        style={{ pointerEvents: disable ? "none" : "all" }}
+                                        onClick={async () => {
+                                            await KFSDK.app.setVariable(selectedCategoryKey, null);
+                                            await refreshComponent();
+                                            setSelectedCategory("");
+                                        }} /> :
+                                    <DownOutlined />}
                             />
                         </div>
                         <div>
@@ -159,7 +176,9 @@ export default function Search() {
                             <Select
                                 options={suppliers ? suppliers?.map((cat) => ({ value: cat._id, label: cat.Supplier })) : []}
                                 value={selectedSupplier}
-                                onChange={(e) => {
+                                onChange={async (e) => {
+                                    await KFSDK.app.setVariable(selectedSupplierKey, e);
+                                    await refreshComponent();
                                     setSelectedSupplier(e);
                                 }}
                                 style={{ width: dropdownWidth }}
@@ -167,6 +186,14 @@ export default function Search() {
                                 filterOption={filterOption}
                                 listHeight={listHeight}
                                 disabled={disable}
+                                suffixIcon={selectedSupplier ?
+                                    <CloseOutlined
+                                        style={{ pointerEvents: disable ? "none" : "all" }}
+                                        onClick={async () => {
+                                            await KFSDK.app.setVariable(selectedSupplierKey, null);
+                                            await refreshComponent();
+                                            setSelectedSupplier("");
+                                        }} /> : <DownOutlined />}
                             />
                         </div>
                         <div>
@@ -184,8 +211,8 @@ export default function Search() {
                                         setSelectedCategory("");
                                         setDisable(false);
                                         setCardButtonDisable(true);
-                                        await KFSDK.app.setVariable(selectedCategoryName, "");
-                                        await KFSDK.app.setVariable(selectedSupplierName, "");
+                                        await KFSDK.app.setVariable(selectedCategoryKey, "");
+                                        await KFSDK.app.setVariable(selectedSupplierKey, "");
                                         await refreshComponent();
                                     }
                                 }}
