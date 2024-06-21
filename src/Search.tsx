@@ -146,7 +146,7 @@ export default function Search() {
                     :
                     <div style={{ display: "flex", alignItems: "flex-end", gap: 10, width: "100%", justifyContent: "center" }} >
                         <div style={{ marginLeft: 10 }} >
-                            <Typography style={{ textAlign: "left", fontWeight: 600 }} >Category Type</Typography>
+                            <Typography style={{ textAlign: "left", fontWeight: 600 }} >Item type</Typography>
                             <Select
                                 options={Category ? Category?.map((cat) => ({ value: cat._id, label: cat.name })) : []}
                                 value={selectedCategory}
