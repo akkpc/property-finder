@@ -6,6 +6,7 @@ const supplierDataform = "Supplier_Master_A20";
 const selectedSupplierKey = "PR_Selected_Supplier";
 const selectedCategoryKey = "PR_Selected_Category";
 const cartKey = "Cart_Item_Count";
+const commodityMaster = "Commodity_Master_A76"
 
 const KFSDK = require("@kissflow/lowcode-client-sdk");
 
@@ -80,9 +81,33 @@ export default function Search() {
     // }, [selectedCategory])
 
     async function getSuppliers() {
+        const commodity_master = await KFSDK.api(`/form/2/${KFSDK.account._id}/${commodityMaster}/allitems/list?&page_number=1&page_size=10000`, {
+            method: "POST",
+        });
+        const commodities = commodity_master.Data;
+        let comm: any = commodities.map(({ Supplier_Instance_ID }: any) => Supplier_Instance_ID);
+        const filterValues = Array.from(new Set(comm));
         const response = await KFSDK.api(`/form/2/${KFSDK.account._id}/${supplierDataform}/allitems/list?&page_number=1&page_size=10000`, {
             method: "POST",
             body: JSON.stringify({
+                Filter: {
+                    "AND": [
+                        {
+                            "AND": [
+                                {
+                                    "LHSField": "_id",
+                                    "LHSAttribute": null,
+                                    "Operator": "PART_OF",
+                                    "RHSType": "Value",
+                                    "RHSValue": filterValues,
+                                    "RHSField": null,
+                                    "RHSParam": "",
+                                    "RHSAttribute": null
+                                }
+                            ]
+                        }
+                    ]
+                },
                 Sort: [
                     {
                         "Name": "Supplier",
@@ -96,8 +121,8 @@ export default function Search() {
                 ]
             })
         })
-        const categories: Supplier[] = response.Data;
-        return categories;
+        const supplier: Supplier[] = response.Data;
+        return supplier;
     }
 
     async function refreshComponent() {
